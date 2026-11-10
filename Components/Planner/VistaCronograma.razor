@@ -1,0 +1,86 @@
+@{
+    var ts = Tareas.Where(t => Fechas.Parse(t.Inicio) is not null && Fechas.Parse(t.Fin) is not null).ToList();
+}
+@if (ts.Count == 0)
+{
+    <div class="state"><h2>Sin tareas con fechas</h2><p>Asigna fecha de inicio y de entrega a las tareas para verlas aquí.</p></div>
+}
+else
+{
+    var hoy = Fechas.Hoy;
+    var d0 = Fechas.Lunes(ts.Min(t => Fechas.Parse(t.Inicio)!.Value));
+    if (hoy < d0) d0 = Fechas.Lunes(hoy);
+    var d1 = ts.Max(t => Fechas.Parse(t.Fin)!.Value).AddDays(3);
+    if (hoy > d1) d1 = hoy.AddDays(3);
+    var n = Fechas.Dias(d0, d1) + 1;
+    var dias = Enumerable.Range(0, n).Select(i => d0.AddDays(i)).ToList();
+    var grupos = Ui.Grupos(Datos).Select(g => (g, lista: Ui.Ordenar(ts.Where(t => Ui.EnFase(Datos, t, g.Id))).ToList())).Where(x => x.lista.Count > 0).ToList();
+    var filas = "20px 34px " + string.Join(" ", grupos.Select(x => $"{PH}px " + string.Join(" ", x.lista.Select(_ => $"{RH}px"))));
+    var fila = 3; var y = HH;
+    var ti = Fechas.Dias(d0, hoy);
+
+    <div class="gantt-wrap">
+        <div class="gantt" style="grid-template-columns:var(--lw) repeat(@n, @(CW)px);grid-template-rows:@filas">
+            <div class="g-label g-head" style="grid-row:1/3;border-top:0;justify-content:flex-start">Tarea</div>
+            @{
+                var mIni = 0;
+                for (var i = 0; i < n; i++)
+                {
+                    if (i == n - 1 || dias[i + 1].Month != dias[i].Month)
+                    {
+                        <div class="g-head month" style="grid-column:@(mIni + 2)/@(i + 3);grid-row:1">@Fechas.Meses[dias[i].Month - 1] @dias[i].Year</div>
+                        mIni = i + 1;
+                    }
+                }
+                for (var i = 0; i < n; i++)
+                {
+                    var dd = dias[i];
+                    <div class="g-head tnum @(dd == hoy ? "hoy" : "")" style="grid-column:@(i + 2);grid-row:2" title="@Fechas.Festivo(dd)">@Fechas.Dias3[(int)dd.DayOfWeek][..1].ToUpperInvariant()<br />@dd.Day</div>
+                }
+            }
+            @foreach (var (g, lista) in grupos)
+            {
+                <div class="g-label phase" style="grid-row:@fila"><span class="dotc" style="--c:@Ui.Color(Datos, g.Id)"></span>@g.Nombre</div>
+                <div class="g-cell phaserow" style="grid-column:2/@(n + 2);grid-row:@fila"></div>
+                fila++; y += PH;
+                foreach (var t in lista)
+                {
+                    <div class="g-label" style="grid-row:@fila" title="@t.Titulo">@t.Titulo</div>
+                    for (var i = 0; i < n; i++)
+                    {
+                        var dd = dias[i];
+                        var clase = Fechas.Festivo(dd) is not null ? "hol" : Fechas.FinDeSemana(dd) ? "we" : "";
+                        <div class="g-cell @clase" style="grid-column:@(i + 2);grid-row:@fila"></div>
+                    }
+                    var ini = Fechas.Parse(t.Inicio)!.Value; var fin = Fechas.Parse(t.Fin)!.Value;
+                    var s = Fechas.Dias(d0, ini); var len = Fechas.Dias(ini, fin) + 1;
+                    var top = y + 8; var tarea = t;
+                    <button type="button" class="g-bar @(t.Estado == "hecha" ? "done" : "") @(t.Semaforo == "vencida" ? "late" : "")"
+                            title="@t.Titulo · @Fechas.Corto(t.Inicio) → @Fechas.Corto(t.Fin)" @onclick="() => OnAbrir.InvokeAsync(tarea.Id)"
+                            style="--c:@Ui.Color(Datos, t.Fase);left:calc(var(--lw) + @(s * CW + 2)px);top:@(top)px;width:@(Math.Max(len * CW - 4, 10))px">
+                        <span class="fill" style="width:@Ui.Num(t.Progreso * 100)%"></span><span>@Ui.Pct(t.Progreso)</span>
+                    </button>
+                    fila++; y += RH;
+                }
+            }
+            @if (ti >= 0 && ti < n)
+            {
+                <div class="g-today" style="left:calc(var(--lw) + @(ti * CW + CW / 2)px)"></div>
+            }
+        </div>
+    </div>
+    <div class="legend">
+        <span><i style="background:var(--weekend)"></i>Fin de semana</span>
+        <span><i style="background:var(--holiday)"></i>Festivo (Colombia)</span>
+        <span><i style="background:var(--accent);border-color:var(--accent)"></i>Hoy</span>
+        <span>El tramo sólido de cada barra es su avance.</span>
+    </div>
+}
+
+@code {
+    [Parameter, EditorRequired] public Datos Datos { get; set; } = default!;
+    [Parameter, EditorRequired] public IReadOnlyList<Tarea> Tareas { get; set; } = [];
+    [Parameter] public EventCallback<string> OnAbrir { get; set; }
+
+    const int CW = 30, RH = 34, PH = 30, HH = 54;
+}

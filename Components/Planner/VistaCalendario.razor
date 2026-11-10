@@ -1,0 +1,55 @@
+@{
+    var hoy = Fechas.Hoy;
+    var inicio = Fechas.Lunes(mes);
+    var nDias = DateTime.DaysInMonth(mes.Year, mes.Month);
+    var total = (int)Math.Ceiling((Fechas.Dias(inicio, mes) + nDias) / 7.0) * 7;
+    var ts = Tareas.Where(t => t.Inicio.Length > 0 || t.Fin.Length > 0).ToList();
+}
+<div class="cal-h">
+    <h2>@Fechas.Meses[mes.Month - 1] @mes.Year</h2>
+    <button class="btn sm" type="button" aria-label="Mes anterior" @onclick="() => mes = mes.AddMonths(-1)">‹</button>
+    <button class="btn sm" type="button" aria-label="Mes siguiente" @onclick="() => mes = mes.AddMonths(1)">›</button>
+    <button class="btn sm ghost" type="button" @onclick="() => mes = new DateOnly(hoy.Year, hoy.Month, 1)">Hoy</button>
+</div>
+<div class="cal">
+    @foreach (var x in new[] { "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom" })
+    {
+        <div class="dow">@x</div>
+    }
+    @for (var i = 0; i < total; i++)
+    {
+        var d = inicio.AddDays(i);
+        var k = Fechas.Ymd(d);
+        var fuera = d.Month != mes.Month;
+        var we = Fechas.FinDeSemana(d);
+        var fest = Fechas.Festivo(d);
+        // En fines de semana solo se muestran las entregas
+        var eventos = ts.Where(t =>
+        {
+            var a = t.Inicio.Length > 0 ? t.Inicio : t.Fin; var b = t.Fin.Length > 0 ? t.Fin : t.Inicio;
+            return string.CompareOrdinal(k, a) >= 0 && string.CompareOrdinal(k, b) <= 0 && (!we || k == b);
+        }).OrderBy(t => Ui.FaseIdx(Datos, t.Fase)).ThenBy(t => t.Orden).ToList();
+        <div class="day @(fuera ? "out" : "") @(fest is not null ? "hol" : we ? "we" : "") @(d == hoy ? "today" : "")">
+            <div class="n tnum"><b>@d.Day</b>@if (fest is not null) { <small title="@fest">@fest</small> }</div>
+            @foreach (var t in eventos)
+            {
+                var entrega = k == t.Fin; var tarea = t;
+                <button type="button" class="ev @(t.Estado == "hecha" ? "done" : "") @(entrega ? "end" : "")" style="--c:@Ui.Color(Datos, t.Fase)"
+                        title="@(t.Titulo + (entrega ? " · entrega" : ""))" @onclick="() => OnAbrir.InvokeAsync(tarea.Id)">@(entrega ? "◆ " : "")@t.Titulo</button>
+            }
+        </div>
+    }
+</div>
+<div class="legend">
+    <span>◆ Día de entrega</span>
+    <span><i style="background:var(--weekend)"></i>Fin de semana</span>
+    <span><i style="background:var(--holiday)"></i>Festivo (Colombia)</span>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public Datos Datos { get; set; } = default!;
+    [Parameter, EditorRequired] public IReadOnlyList<Tarea> Tareas { get; set; } = [];
+    [Parameter] public EventCallback<string> OnAbrir { get; set; }
+
+    DateOnly mes = new(Fechas.Hoy.Year, Fechas.Hoy.Month, 1);
+}

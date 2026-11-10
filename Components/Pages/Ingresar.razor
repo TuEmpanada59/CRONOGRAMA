@@ -1,0 +1,76 @@
+@page "/ingresar"
+@attribute [AllowAnonymous]
+@using System.Security.Claims
+@using Microsoft.AspNetCore.Authentication
+@using Microsoft.AspNetCore.Authentication.Cookies
+@inject Config Config
+@inject LimiteIngreso Limite
+@inject NavigationManager Nav
+
+<PageTitle>Ingresar · Cronograma</PageTitle>
+
+<section class="login">
+    <form class="login-box" method="post" @formname="ingreso" @onsubmit="Entrar">
+        <AntiforgeryToken />
+        <span class="logo" role="img" aria-label="Londoño Gómez"></span>
+        <div>
+            <h1>Cronograma</h1>
+            <p class="muted">Ingresa para ver y editar el plan.</p>
+        </div>
+        <div class="field">
+            <label for="l-usuario">Usuario</label>
+            <input id="l-usuario" name="Form.Usuario" value="@Form?.Usuario" autocomplete="username" required autofocus />
+        </div>
+        <div class="field">
+            <label for="l-clave">Clave</label>
+            <input id="l-clave" name="Form.Clave" type="password" autocomplete="current-password" required />
+        </div>
+        @if (error is not null)
+        {
+            <p class="form-err" role="alert">@error</p>
+        }
+        <button class="btn primary block" type="submit">Ingresar</button>
+    </form>
+    <button class="btn icon theme-btn login-theme" type="button" data-tema aria-label="Cambiar tema">
+        <TemaIconos />
+    </button>
+</section>
+
+@code {
+    [CascadingParameter] HttpContext Http { get; set; } = default!;
+    [SupplyParameterFromForm] Credenciales? Form { get; set; }
+    string? error;
+
+    protected override async Task OnInitializedAsync()
+    {
+        Form ??= new();
+        if (Config.SinLogin || (HttpMethods.IsGet(Http.Request.Method) && Http.User.Identity?.IsAuthenticated == true))
+            Nav.NavigateTo("/");
+        else if (Config.Usuarios.Count == 0)
+            error = "El servidor aún no tiene usuarios configurados (variable USUARIOS).";
+        await Task.CompletedTask;
+    }
+
+    async Task Entrar()
+    {
+        var ip = Http.Connection.RemoteIpAddress?.ToString() ?? "?";
+        if (Limite.Bloqueado(ip)) { error = "Demasiados intentos. Espera 15 minutos."; return; }
+        var u = Config.Usuarios.FirstOrDefault(x => string.Equals(x.Nombre, (Form?.Usuario ?? "").Trim(), StringComparison.OrdinalIgnoreCase));
+        if (u is null || !u.ClaveValida(Form?.Clave ?? ""))
+        {
+            Limite.Fallo(ip);
+            error = "Usuario o clave incorrectos.";
+            return;
+        }
+        Limite.Exito(ip);
+        var id = new ClaimsIdentity([new Claim(ClaimTypes.Name, u.Nombre)], CookieAuthenticationDefaults.AuthenticationScheme);
+        await Http.SignInAsync(new ClaimsPrincipal(id), new AuthenticationProperties { IsPersistent = true });
+        Nav.NavigateTo("/");
+    }
+
+    public sealed class Credenciales
+    {
+        public string? Usuario { get; set; }
+        public string? Clave { get; set; }
+    }
+}

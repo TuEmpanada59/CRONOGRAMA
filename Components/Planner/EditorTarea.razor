@@ -1,0 +1,160 @@
+<div class="scrim" @onclick="OnCerrar">
+    <div class="panel" role="dialog" aria-modal="true" aria-labelledby="ed-h" @onclick:stopPropagation="true">
+        <div class="panel-h">
+            <h2 id="ed-h">@(Nueva ? "Nueva tarea" : "Editar tarea")</h2>
+            <button class="x" type="button" aria-label="Cerrar" @onclick="OnCerrar">✕</button>
+        </div>
+
+        <div class="field">
+            <label for="f-titulo">Tarea</label>
+            <input id="f-titulo" @bind="T.Titulo" maxlength="200" placeholder="Ej.: Validar celulares importados" />
+        </div>
+        <div class="grid2">
+            <div class="field">
+                <label for="f-fase">Fase</label>
+                <select id="f-fase" @bind="T.Fase">
+                    @foreach (var f in Datos.Fases.OrderBy(f => f.Orden)) { <option value="@f.Id">@f.Nombre</option> }
+                </select>
+            </div>
+            <div class="field">
+                <label for="f-resp">Responsable</label>
+                <select id="f-resp" @bind="T.Responsable">
+                    <option value="">Sin asignar</option>
+                    @foreach (var p in Responsables) { <option value="@p">@p</option> }
+                </select>
+            </div>
+            <div class="field"><label for="f-inicio">Inicio</label><input id="f-inicio" type="date" value="@T.Inicio" @onchange="e => T.Inicio = e.Value?.ToString() ?? string.Empty" /></div>
+            <div class="field"><label for="f-fin">Entrega</label><input id="f-fin" type="date" value="@T.Fin" @onchange="e => T.Fin = e.Value?.ToString() ?? string.Empty" /></div>
+            <div class="field">
+                <label for="f-estado">Estado</label>
+                <select id="f-estado" @bind="T.Estado">
+                    @foreach (var (k, n) in Catalogo.Estados) { <option value="@k">@n</option> }
+                </select>
+            </div>
+            <div class="field">
+                <label for="f-prio">Prioridad</label>
+                <select id="f-prio" @bind="T.Prioridad">
+                    @foreach (var (k, n) in Catalogo.Prioridades) { <option value="@k">@n</option> }
+                </select>
+            </div>
+        </div>
+        <div class="field">
+            <label for="f-entregable">Entregable</label>
+            <input id="f-entregable" @bind="T.Entregable" maxlength="300" placeholder="Ej.: Archivo consolidado .xlsx" />
+        </div>
+
+        <div class="field">
+            <span class="lbl">Subtareas</span>
+            <div class="subs">
+                @if (T.Subtareas.Count == 0)
+                {
+                    <div class="note">Sin subtareas. Úsalas para desglosar la tarea.</div>
+                }
+                @foreach (var s in T.Subtareas)
+                {
+                    var sub = s;
+                    <div class="sub-item @(s.Hecha ? "done" : "")" @key="s">
+                        <input type="checkbox" class="chk" @bind="sub.Hecha" aria-label="Subtarea hecha" />
+                        <input type="text" @bind="sub.Texto" @bind:event="oninput" aria-label="Texto de subtarea" />
+                        <button class="x" type="button" aria-label="Quitar subtarea" @onclick="() => T.Subtareas.Remove(sub)">✕</button>
+                    </div>
+                }
+            </div>
+            <div class="sub-add">
+                <input id="f-sub-new" @bind="nuevaSub" @bind:event="oninput" @onkeydown="TeclaSub"
+                       placeholder="Agregar subtarea y Enter" aria-label="Nueva subtarea" />
+                <button class="btn sm" type="button" @onclick="AgregarSub">Agregar</button>
+            </div>
+        </div>
+
+        <div class="field">
+            <label for="f-notas">Notas</label>
+            <textarea id="f-notas" @bind="T.Notas" placeholder="Criterios, hallazgos, enlaces a archivos…"></textarea>
+        </div>
+
+        @if (!Nueva)
+        {
+            <div class="meta-line">
+                @if (T.CreadaPor is not null) { <span>Creada por @T.CreadaPor</span> }
+                @if (Fechas.Parse(T.Actualizada?[..Math.Min(10, T.Actualizada.Length)]) is { } act)
+                {
+                    <span> · Última edición @Fechas.Corto(act)@(T.ActualizadaPor is not null ? $" por {T.ActualizadaPor}" : "")</span>
+                }
+            </div>
+        }
+        @if (error is not null)
+        {
+            <p class="form-err" role="alert">@error</p>
+        }
+
+        <div class="panel-foot">
+            <div>
+                @if (!Nueva)
+                {
+                    <button class="btn danger @(confirmar ? "armed" : "")" type="button" disabled="@ocupado" @onclick="Eliminar">
+                        @(confirmar ? "Confirmar eliminación" : "Eliminar")
+                    </button>
+                }
+            </div>
+            <div style="display:flex;gap:8px">
+                <button class="btn" type="button" @onclick="OnCerrar">Cancelar</button>
+                <button class="btn primary" type="button" disabled="@ocupado" @onclick="Guardar">Guardar</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    /// <summary>Copia editable de la tarea (o una tarea nueva con Id vacío).</summary>
+    [Parameter, EditorRequired] public Tarea T { get; set; } = default!;
+    [Parameter, EditorRequired] public Datos Datos { get; set; } = default!;
+    [Parameter, EditorRequired] public Func<Tarea, Task<string?>> AlGuardar { get; set; } = default!;
+    [Parameter, EditorRequired] public Func<string, Task<string?>> AlEliminar { get; set; } = default!;
+    [Parameter] public EventCallback OnCerrar { get; set; }
+    [Inject] IJSRuntime JS { get; set; } = default!;
+
+    bool Nueva => T.Id.Length == 0;
+    string nuevaSub = "";
+    string? error;
+    bool confirmar, ocupado;
+
+    IEnumerable<string> Responsables =>
+        T.Responsable.Length > 0 && !Datos.Equipo.Contains(T.Responsable) ? Datos.Equipo.Append(T.Responsable) : Datos.Equipo;
+
+    protected override async Task OnAfterRenderAsync(bool first)
+    {
+        if (first && Nueva) try { await JS.InvokeVoidAsync("cg.enfocar", "#f-titulo"); } catch { }
+    }
+
+    void AgregarSub()
+    {
+        if (nuevaSub.Trim().Length == 0) return;
+        T.Subtareas.Add(new Subtarea { Texto = nuevaSub.Trim() });
+        nuevaSub = "";
+    }
+
+    void TeclaSub(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter") AgregarSub();
+    }
+
+    async Task Guardar()
+    {
+        AgregarSub();
+        error = T.Titulo.Trim().Length == 0 ? "Escribe el nombre de la tarea."
+            : T.Inicio.Length > 0 && T.Fin.Length > 0 && string.CompareOrdinal(T.Fin, T.Inicio) < 0 ? "La entrega no puede ser antes del inicio."
+            : null;
+        if (error is not null) return;
+        ocupado = true;
+        error = await AlGuardar(T);
+        ocupado = false;
+    }
+
+    async Task Eliminar()
+    {
+        if (!confirmar) { confirmar = true; return; }
+        ocupado = true;
+        error = await AlEliminar(T.Id);
+        ocupado = false;
+    }
+}

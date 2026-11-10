@@ -1,0 +1,49 @@
+<div class="board">
+    @foreach (var (k, nombre) in Catalogo.Estados)
+    {
+        var items = Tareas.Where(t => t.Estado == k).OrderBy(t => t.Fin.Length == 0).ThenBy(t => t.Fin, StringComparer.Ordinal).ToList();
+        <div class="col @(sobre == k ? "over" : "")" @key="k"
+             @ondragenter="() => sobre = k" @ondragover="() => { }" @ondragover:preventDefault="true" @ondrop="() => Soltar(k)">
+            <div class="col-h"><Etiquetas Estado="@k" /><span class="muted tnum">@items.Count</span></div>
+            @foreach (var t in items)
+            {
+                var hechas = t.Subtareas.Count(s => s.Hecha);
+                <div class="card" draggable="true" data-card="@t.Id" tabindex="0" style="--c:@Ui.Color(Datos, t.Fase)" @key="t.Id"
+                     @ondragstart="() => arrastrando = t.Id" @ondragend="() => sobre = null"
+                     @onclick="() => OnAbrir.InvokeAsync(t.Id)" @onkeydown="e => Tecla(e, t.Id)">
+                    <div class="t">@t.Titulo</div>
+                    <div class="meta"><span>@Ui.NombreFase(Datos, t.Fase)</span></div>
+                    <div class="meta tnum">
+                        <span>@Fechas.Corto(t.Fin)</span>
+                        @if (t.Responsable.Length > 0) { <span>· @t.Responsable</span> }
+                        @if (t.Subtareas.Count > 0) { <span>· @hechas/@t.Subtareas.Count</span> }
+                        <Etiquetas Tarea="t" />
+                    </div>
+                </div>
+            }
+            @if (items.Count == 0)
+            {
+                <div class="hint">Arrastra tareas aquí</div>
+            }
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired] public Datos Datos { get; set; } = default!;
+    [Parameter, EditorRequired] public IReadOnlyList<Tarea> Tareas { get; set; } = [];
+    [Parameter] public EventCallback<string> OnAbrir { get; set; }
+    [Parameter] public EventCallback<(string Id, string Estado)> OnMover { get; set; }
+
+    string? arrastrando, sobre;
+
+    async Task Soltar(string estado)
+    {
+        sobre = null;
+        var id = arrastrando; arrastrando = null;
+        var t = Tareas.FirstOrDefault(x => x.Id == id);
+        if (t is not null && t.Estado != estado) await OnMover.InvokeAsync((t.Id, estado));
+    }
+
+    Task Tecla(KeyboardEventArgs e, string id) => e.Key is "Enter" or " " ? OnAbrir.InvokeAsync(id) : Task.CompletedTask;
+}

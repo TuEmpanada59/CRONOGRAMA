@@ -1,0 +1,11 @@
+bin/
+obj/
+data/
+publish/
+*.user
+.vs/
+.vscode/
+.idea/
+*.swp
+.DS_Store
+appsettings.Development.json

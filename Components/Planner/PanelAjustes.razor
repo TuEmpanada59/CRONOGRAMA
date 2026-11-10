@@ -1,0 +1,90 @@
+<div class="scrim" @onclick="OnCerrar">
+    <div class="panel" role="dialog" aria-modal="true" aria-labelledby="st-h" @onclick:stopPropagation="true">
+        <div class="panel-h">
+            <h2 id="st-h">Fases y equipo</h2>
+            <button class="x" type="button" aria-label="Cerrar" @onclick="OnCerrar">✕</button>
+        </div>
+
+        <div class="field">
+            <span class="lbl">Fases (en orden)</span>
+            @for (var i = 0; i < fases.Count; i++)
+            {
+                var f = fases[i]; var idx = i;
+                var n = f.Id.Length > 0 ? Datos.Tareas.Count(t => t.Fase == f.Id) : 0;
+                <div class="set-row" @key="f">
+                    <span class="dotc" style="--c:@Catalogo.ColoresFase[idx % Catalogo.ColoresFase.Length]"></span>
+                    <input @bind="f.Nombre" @bind:event="oninput" maxlength="80" placeholder="Nombre de la fase @(idx + 1)" aria-label="Nombre de la fase @(idx + 1)" />
+                    <span class="muted tnum" style="font-size:13px;white-space:nowrap">@n tarea@(n == 1 ? "" : "s")</span>
+                    <button class="x" type="button" disabled="@(idx == 0)" aria-label="Subir fase" @onclick="() => Subir(idx)">↑</button>
+                    <button class="x" type="button" disabled="@(n > 0)" title="@(n > 0 ? "Mueve o elimina sus tareas primero" : null)" aria-label="Eliminar fase"
+                            @onclick="() => fases.RemoveAt(idx)">✕</button>
+                </div>
+            }
+            <button class="btn sm" type="button" style="align-self:flex-start" @onclick="() => fases.Add(new Fase())">+ Agregar fase</button>
+        </div>
+
+        <div class="field">
+            <span class="lbl">Equipo (responsables)</span>
+            @for (var i = 0; i < equipo.Count; i++)
+            {
+                var p = equipo[i]; var idx = i;
+                <div class="set-row" @key="p">
+                    <input @bind="p.Nombre" @bind:event="oninput" maxlength="80" placeholder="Nombre" aria-label="Nombre del responsable @(idx + 1)" />
+                    <button class="x" type="button" aria-label="Quitar persona" @onclick="() => equipo.RemoveAt(idx)">✕</button>
+                </div>
+            }
+            <button class="btn sm" type="button" style="align-self:flex-start" @onclick="() => equipo.Add(new Persona())">+ Agregar persona</button>
+            <div class="note">Si cambias un nombre, las tareas asignadas a ese nombre se actualizan.</div>
+        </div>
+
+        <div class="field">
+            <span class="lbl">Respaldo</span>
+            <div><a class="btn sm" href="/respaldo.json" download>Descargar respaldo (.json)</a></div>
+            <div class="note">El servidor también guarda una copia diaria automática de los últimos 30 días.</div>
+        </div>
+
+        @if (error is not null)
+        {
+            <p class="form-err" role="alert">@error</p>
+        }
+
+        <div class="panel-foot">
+            <span></span>
+            <div style="display:flex;gap:8px">
+                <button class="btn" type="button" @onclick="OnCerrar">Cancelar</button>
+                <button class="btn primary" type="button" disabled="@ocupado" @onclick="Guardar">Guardar</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public Datos Datos { get; set; } = default!;
+    [Parameter, EditorRequired] public Func<List<Fase>, List<string>, Dictionary<string, string>, Task<string?>> AlGuardar { get; set; } = default!;
+    [Parameter] public EventCallback OnCerrar { get; set; }
+
+    sealed class Persona { public string Nombre { get; set; } = ""; public string? Original { get; init; } }
+
+    List<Fase> fases = [];
+    List<Persona> equipo = [];
+    string? error;
+    bool ocupado;
+
+    protected override void OnInitialized()
+    {
+        fases = Datos.Fases.OrderBy(f => f.Orden).Select(f => new Fase { Id = f.Id, Nombre = f.Nombre, Orden = f.Orden }).ToList();
+        if (fases.Count == 0) fases.Add(new Fase());
+        equipo = Datos.Equipo.Select(n => new Persona { Nombre = n, Original = n }).ToList();
+    }
+
+    void Subir(int i) => (fases[i - 1], fases[i]) = (fases[i], fases[i - 1]);
+
+    async Task Guardar()
+    {
+        var renombres = equipo.Where(p => p.Original is not null && p.Nombre.Trim().Length > 0 && p.Nombre.Trim() != p.Original)
+            .ToDictionary(p => p.Original!, p => p.Nombre.Trim());
+        ocupado = true;
+        error = await AlGuardar(fases, equipo.Select(p => p.Nombre).ToList(), renombres);
+        ocupado = false;
+    }
+}

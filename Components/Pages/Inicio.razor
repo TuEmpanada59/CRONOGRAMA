@@ -1,0 +1,281 @@
+@page "/"
+@attribute [Authorize]
+@rendermode InteractiveServer
+@implements IDisposable
+@inject Almacen Db
+@inject Config Config
+@inject IJSRuntime JS
+
+<PageTitle>Cronograma · Londoño Gómez</PageTitle>
+
+@{
+    var ts = Filtradas();
+    var venc = d.Tareas.Count(t => t.Semaforo == "vencida");
+    var pronto = d.Tareas.Count(t => t.Semaforo == "pronto");
+    var curso = d.Tareas.Count(t => t.Estado == "en_curso");
+    var hechas = d.Tareas.Count(t => t.Estado == "hecha");
+}
+
+<div class="wrap">
+    <header class="top">
+        <div class="brand">
+            <img src="favicon.svg" alt="" class="sym" width="26" height="29" />
+            <div>
+                <h1>Cronograma</h1>
+                <div class="sub">
+                    <span class="alerts">
+                        @if (d.Tareas.Count > 0)
+                        {
+                            <span>@hechas de @d.Tareas.Count hechas</span>
+                            <span class="o"><b>@curso</b> en curso</span>
+                        }
+                        else
+                        {
+                            <span>Sin tareas todavía</span>
+                        }
+                        @if (venc > 0) { <span class="v"><b>@venc</b> vencida@(venc > 1 ? "s" : "")</span> }
+                        @if (pronto > 0) { <span class="p"><b>@pronto</b> por vencer</span> }
+                        <span>Hoy @Fechas.Corto(Fechas.Hoy)</span>
+                    </span>
+                </div>
+            </div>
+        </div>
+        <div class="actions">
+            @if (d.Tareas.Count > 0)
+            {
+                <a class="btn ghost" href="/exportar.csv" download>Exportar CSV</a>
+            }
+            <button class="btn ghost" type="button" @onclick="AbrirAjustes">Fases y equipo</button>
+            <button class="btn icon theme-btn" type="button" data-tema aria-label="Cambiar tema claro/oscuro" title="Cambiar tema"><TemaIconos /></button>
+            @if (!Config.SinLogin)
+            {
+                <form method="post" action="/salir" class="inline">
+                    <AntiforgeryToken />
+                    <button class="btn ghost" type="submit" title="Cerrar sesión de @usuario">Salir</button>
+                </form>
+            }
+            <button class="btn primary" type="button" @onclick="() => NuevaTarea(null)">+ Nueva tarea</button>
+        </div>
+    </header>
+
+    @if (d.Fases.Count > 0)
+    {
+        <section class="summary" aria-label="Avance por fase">
+            @foreach (var f in d.Fases.OrderBy(f => f.Orden))
+            {
+                var tf = d.Tareas.Where(t => t.Fase == f.Id).ToList();
+                var p = Ui.Avance(tf);
+                var cierre = tf.Select(t => t.Fin).Where(x => x.Length > 0).Order(StringComparer.Ordinal).LastOrDefault();
+                <div class="phase-card" style="--c:@Ui.Color(d, f.Id)" @key="f.Id">
+                    <div class="row"><span class="name"><span class="dotc"></span>@f.Nombre</span><span class="pct tnum">@Ui.Pct(p)</span></div>
+                    <div class="bar"><span style="width:@Ui.Num(p * 100)%;background:var(--c)"></span></div>
+                    <div class="row foot tnum"><span>@tf.Count(t => t.Estado == "hecha")/@tf.Count tareas</span><span>@(cierre is null ? "" : "Cierre " + Fechas.Corto(cierre))</span></div>
+                </div>
+            }
+        </section>
+    }
+
+    <div class="toolbar">
+        <div class="tabs" role="tablist" aria-label="Vista">
+            @foreach (var (k, n) in Vistas)
+            {
+                <button class="tab" role="tab" type="button" aria-selected="@(vista == k ? "true" : "false")" @onclick="() => CambiarVista(k)">@n</button>
+            }
+        </div>
+        <div class="filters">
+            <select aria-label="Filtrar por responsable" @bind="fResp">
+                <option value="">Todos los responsables</option>
+                @foreach (var p in d.Equipo) { <option value="@p">@p</option> }
+                <option value="__none">Sin asignar</option>
+            </select>
+            <select aria-label="Filtrar por estado" @bind="fEstado">
+                <option value="">Todos los estados</option>
+                @foreach (var (k, n) in Catalogo.Estados) { <option value="@k">@n</option> }
+                <option value="abiertas">Sin terminar</option>
+            </select>
+            <input type="search" placeholder="Buscar…" aria-label="Buscar tarea" @bind="fQ" @bind:event="oninput" />
+        </div>
+    </div>
+
+    <main>
+        @if (d.Fases.Count == 0 && d.Tareas.Count == 0)
+        {
+            <div class="state">
+                <h2>El cronograma está vacío</h2>
+                <p>Primero crea las fases del proyecto (por ejemplo: Diagnóstico, Depuración, Validación) y luego agrega las tareas.</p>
+                <button class="btn primary" type="button" @onclick="AbrirAjustes">Crear fases</button>
+            </div>
+        }
+        else if (vista == "tablero")
+        {
+            <VistaTablero Datos="d" Tareas="ts" OnAbrir="Abrir" OnMover="Mover" />
+        }
+        else if (vista == "cronograma")
+        {
+            <VistaCronograma Datos="d" Tareas="ts" OnAbrir="Abrir" />
+        }
+        else if (vista == "calendario")
+        {
+            <VistaCalendario Datos="d" Tareas="ts" OnAbrir="Abrir" />
+        }
+        else
+        {
+            <VistaLista Datos="d" Tareas="ts" HayFiltros="HayFiltros" OnAbrir="Abrir" OnNuevaEn="id => NuevaTarea(id)" OnMarcar="Marcar" />
+        }
+    </main>
+</div>
+
+@if (borrador is not null)
+{
+    <EditorTarea @key="borrador" T="borrador" Datos="d" AlGuardar="GuardarTarea" AlEliminar="EliminarTarea" OnCerrar="Cerrar" />
+}
+@if (ajustes)
+{
+    <PanelAjustes Datos="d" AlGuardar="GuardarAjustes" OnCerrar="Cerrar" />
+}
+@if (aviso is not null)
+{
+    <div class="toast" role="status">@aviso</div>
+}
+
+@code {
+    [CascadingParameter] Task<AuthenticationState> Auth { get; set; } = default!;
+
+    static readonly (string, string)[] Vistas = [("lista", "Lista"), ("tablero", "Tablero"), ("cronograma", "Cronograma"), ("calendario", "Calendario")];
+
+    Datos d = default!;
+    string usuario = "";
+    string vista = "lista";
+    string fResp = "", fEstado = "", fQ = "";
+    Tarea? borrador;
+    bool ajustes;
+    string? aviso;
+    CancellationTokenSource? avisoCts;
+
+    bool HayFiltros => fResp.Length > 0 || fEstado.Length > 0 || fQ.Trim().Length > 0;
+
+    protected override async Task OnInitializedAsync()
+    {
+        d = Db.Actual;
+        Db.Cambio += AlCambiar;
+        usuario = (await Auth).User.Identity?.Name ?? "";
+    }
+
+    // Cuando la otra persona guarda algo, esta pantalla se actualiza sola
+    void AlCambiar() => _ = InvokeAsync(() => { d = Db.Actual; StateHasChanged(); });
+
+    public void Dispose() { Db.Cambio -= AlCambiar; avisoCts?.Cancel(); }
+
+    protected override async Task OnAfterRenderAsync(bool first)
+    {
+        try
+        {
+            if (first)
+            {
+                var v = await JS.InvokeAsync<string?>("cg.leer", "cg-vista");
+                if (v is not null && Vistas.Any(x => x.Item1 == v) && v != vista) { vista = v; StateHasChanged(); }
+            }
+            if (vista == "cronograma") await JS.InvokeVoidAsync("cg.centrarHoy");
+        }
+        catch (JSDisconnectedException) { }
+        catch (InvalidOperationException) { }
+    }
+
+    List<Tarea> Filtradas()
+    {
+        var q = fQ.Trim().ToLowerInvariant();
+        return d.Tareas.Where(t =>
+            (fResp.Length == 0 || (fResp == "__none" ? t.Responsable.Length == 0 : t.Responsable == fResp)) &&
+            (fEstado.Length == 0 || (fEstado == "abiertas" ? t.Estado != "hecha" : t.Estado == fEstado)) &&
+            (q.Length == 0 || t.Titulo.ToLowerInvariant().Contains(q) || t.Notas.ToLowerInvariant().Contains(q) ||
+             t.Subtareas.Any(s => s.Texto.ToLowerInvariant().Contains(q)))).ToList();
+    }
+
+    async Task CambiarVista(string v)
+    {
+        vista = v;
+        try { await JS.InvokeVoidAsync("cg.guardar", "cg-vista", v); } catch { }
+    }
+
+    void Abrir(string id)
+    {
+        var t = d.Tareas.FirstOrDefault(x => x.Id == id);
+        if (t is not null) { ajustes = false; borrador = t.Clonar(); }
+    }
+
+    void NuevaTarea(string? faseId)
+    {
+        if (d.Fases.Count == 0) { Avisar("Primero crea al menos una fase."); AbrirAjustes(); return; }
+        var hoy = Fechas.Hoy;
+        ajustes = false;
+        borrador = new Tarea
+        {
+            Fase = faseId ?? d.Fases.OrderBy(f => f.Orden).First().Id,
+            Responsable = d.Equipo.Contains(usuario) ? usuario : "",
+            Inicio = Fechas.Ymd(hoy),
+            Fin = Fechas.Ymd(hoy.AddDays(2)),
+        };
+    }
+
+    void AbrirAjustes() { borrador = null; ajustes = true; }
+    void Cerrar() { borrador = null; ajustes = false; }
+
+    async Task<string?> Intentar(Func<Task> accion, string? ok)
+    {
+        try
+        {
+            await accion();
+            d = Db.Actual;
+            if (ok is not null) Avisar(ok);
+            return null;
+        }
+        catch (ErrorValidacion e) { return e.Message; }
+        catch (Exception) { return "No se pudo guardar. Intenta de nuevo."; }
+    }
+
+    async Task<string?> GuardarTarea(Tarea t)
+    {
+        var nueva = t.Id.Length == 0;
+        var err = await Intentar(() => nueva ? Db.CrearTarea(t, usuario) : Db.ActualizarTarea(t, usuario), nueva ? "Tarea creada" : "Cambios guardados");
+        if (err is null) borrador = null;
+        return err;
+    }
+
+    async Task<string?> EliminarTarea(string id)
+    {
+        var err = await Intentar(() => Db.EliminarTarea(id), "Tarea eliminada");
+        if (err is null) borrador = null;
+        return err;
+    }
+
+    async Task<string?> GuardarAjustes(List<Fase> fases, List<string> equipo, Dictionary<string, string> renombres)
+    {
+        var err = await Intentar(() => Db.GuardarConfig(fases, equipo, renombres), "Ajustes guardados");
+        if (err is null) ajustes = false;
+        return err;
+    }
+
+    async Task Marcar((Tarea t, bool hecha) x)
+    {
+        var estado = x.hecha ? "hecha" : x.t.Subtareas.Any(s => s.Hecha) ? "en_curso" : "pendiente";
+        var err = await Intentar(() => Db.CambiarEstado(x.t.Id, estado, usuario), null);
+        if (err is not null) Avisar(err);
+    }
+
+    async Task Mover((string Id, string Estado) x)
+    {
+        var err = await Intentar(() => Db.CambiarEstado(x.Id, x.Estado, usuario), null);
+        if (err is not null) Avisar(err);
+    }
+
+    void Avisar(string msg)
+    {
+        avisoCts?.Cancel();
+        var cts = avisoCts = new CancellationTokenSource();
+        aviso = msg;
+        _ = Task.Delay(2800, cts.Token).ContinueWith(t =>
+        {
+            if (!t.IsCanceled) InvokeAsync(() => { aviso = null; StateHasChanged(); });
+        }, TaskScheduler.Default);
+    }
+}

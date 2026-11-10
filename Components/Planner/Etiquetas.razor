@@ -1,0 +1,14 @@
+@* Etiqueta de estado y aviso de vencimiento *@
+@if (Estado is not null)
+{
+    <span class="pill st-@Estado"><span class="dot"></span>@Catalogo.Estados.GetValueOrDefault(Estado, Estado)</span>
+}
+@if (Tarea is not null && Tarea.Semaforo.Length > 0)
+{
+    <span class="sem @Tarea.Semaforo">@Ui.TextoSemaforo(Tarea)</span>
+}
+
+@code {
+    [Parameter] public string? Estado { get; set; }
+    [Parameter] public Tarea? Tarea { get; set; }
+}
