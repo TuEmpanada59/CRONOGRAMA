@@ -1,0 +1,258 @@
+@page "/informe"
+@attribute [Authorize]
+@inject Almacen Db
+
+@* Informe listo para imprimir o guardar como PDF (A4 horizontal).
+   Respeta los filtros de la pantalla principal (responsable, estado y búsqueda). *@
+
+<PageTitle>@($"Cronograma Londoño Gómez {Fechas.Ymd(Fechas.Hoy)}")</PageTitle>
+
+@{
+    var d = Db.Actual;
+    var ts = Ui.Filtrar(d, Resp, Estado, Q);
+    var grupos = Ui.Grupos(d).Select(g => (g, lista: Ui.Ordenar(ts.Where(t => Ui.EnFase(d, t, g.Id))).ToList())).Where(x => x.lista.Count > 0).ToList();
+    var filtros = Ui.DescribirFiltros(Resp, Estado, Q);
+    var hoy = Fechas.Hoy;
+    var ahora = DateTime.UtcNow.AddHours(-5);
+    var hechas = ts.Count(t => t.Estado == "hecha");
+    var curso = ts.Count(t => t.Estado == "en_curso");
+    var bloq = ts.Count(t => t.Estado == "bloqueada");
+    var venc = ts.Count(t => t.Semaforo == "vencida");
+}
+
+<div class="informe" data-autoimprimir="@(Imprimir == 1 ? "1" : null)">
+    <form class="inf-barra no-print" method="get" action="/informe">
+        <a class="btn ghost" href="/">← Volver</a>
+        <input type="hidden" name="o" value="1" />
+        @if (!string.IsNullOrEmpty(Resp)) { <input type="hidden" name="resp" value="@Resp" /> }
+        @if (!string.IsNullOrEmpty(Estado)) { <input type="hidden" name="estado" value="@Estado" /> }
+        @if (!string.IsNullOrWhiteSpace(Q)) { <input type="hidden" name="q" value="@Q" /> }
+        <span class="inf-ops">
+            <label><input type="checkbox" class="chk" name="cronograma" value="1" checked="@ConCronograma" /> Cronograma</label>
+            <label><input type="checkbox" class="chk" name="lista" value="1" checked="@ConLista" /> Lista de tareas</label>
+            <label><input type="checkbox" class="chk" name="subtareas" value="1" checked="@ConSubtareas" /> Subtareas</label>
+            <label><input type="checkbox" class="chk" name="notas" value="1" checked="@ConNotas" /> Notas</label>
+            <button class="btn sm" type="submit">Aplicar</button>
+        </span>
+        <span class="inf-acc">
+            <span class="note">En el diálogo elige <b>Guardar como PDF</b>.</span>
+            <button class="btn primary" type="button" data-imprimir>Guardar como PDF</button>
+        </span>
+    </form>
+
+    <article class="hoja">
+        <header class="inf-h">
+            <img src="logo-azul.svg" alt="Londoño Gómez" class="inf-logo" width="132" height="48" />
+            <div class="inf-tit">
+                <h1>Cronograma</h1>
+                <div class="inf-sub">Informe de avance · @Fechas.Corto(hoy) @hoy.Year</div>
+            </div>
+            <div class="inf-meta">
+                <div>Generado el @Fechas.Corto(hoy) @hoy.Year, @ahora.ToString("HH:mm")@(Usuario is null ? "" : $" · {Usuario}")</div>
+                @if (filtros is not null) { <div>Filtros: @filtros</div> }
+            </div>
+        </header>
+
+        @if (ts.Count == 0)
+        {
+            <p class="inf-vacio">@(filtros is null ? "Todavía no hay tareas en el cronograma." : "Ninguna tarea coincide con los filtros.")</p>
+        }
+        else
+        {
+            <section class="inf-kpis">
+                <div><b class="tnum">@ts.Count</b><span>Tareas</span></div>
+                <div><b class="tnum">@Ui.Pct(Ui.Avance(ts))</b><span>Avance general</span></div>
+                <div><b class="tnum">@hechas</b><span>Hechas</span></div>
+                <div><b class="tnum">@curso</b><span>En curso</span></div>
+                <div><b class="tnum">@bloq</b><span>Bloqueadas</span></div>
+                <div class="@(venc > 0 ? "alerta" : "")"><b class="tnum">@venc</b><span>Vencidas</span></div>
+            </section>
+
+            <section class="inf-sec">
+                <h2>Avance por fase</h2>
+                <table class="inf-tabla inf-fases">
+                    <thead><tr><th>Fase</th><th class="num">Tareas</th><th class="num">Hechas</th><th style="width:34%">Avance</th><th>Inicio</th><th>Cierre</th></tr></thead>
+                    <tbody>
+                        @foreach (var (g, lista) in grupos)
+                        {
+                            var p = Ui.Avance(lista);
+                            var ini = lista.Select(t => t.Inicio).Where(x => x.Length > 0).Order(StringComparer.Ordinal).FirstOrDefault();
+                            var fin = lista.Select(t => t.Fin).Where(x => x.Length > 0).Order(StringComparer.Ordinal).LastOrDefault();
+                            <tr>
+                                <td><span class="dotc" style="--c:@Ui.Color(d, g.Id)"></span> @g.Nombre</td>
+                                <td class="num tnum">@lista.Count</td>
+                                <td class="num tnum">@lista.Count(t => t.Estado == "hecha")</td>
+                                <td><span class="inf-pbar"><span style="width:@Ui.Num(p * 100)%;background:@Ui.Color(d, g.Id)"></span></span> <span class="tnum">@Ui.Pct(p)</span></td>
+                                <td class="tnum">@Fechas.Corto(ini)</td>
+                                <td class="tnum">@Fechas.Corto(fin)</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </section>
+
+            @if (ConCronograma)
+            {
+                var conFechas = ts.Where(t => Fechas.Parse(t.Inicio) is not null && Fechas.Parse(t.Fin) is not null).ToList();
+                <section class="inf-sec inf-gantt-sec">
+                    <h2>Cronograma</h2>
+                    @if (conFechas.Count == 0)
+                    {
+                        <p class="inf-vacio">Ninguna tarea tiene fecha de inicio y de entrega.</p>
+                    }
+                    else
+                    {
+                        var d0 = Fechas.Lunes(conFechas.Min(t => Fechas.Parse(t.Inicio)!.Value));
+                        var d1 = Fechas.Lunes(conFechas.Max(t => Fechas.Parse(t.Fin)!.Value)).AddDays(6);
+                        var n = Fechas.Dias(d0, d1) + 1;
+                        var dias = Enumerable.Range(0, n).Select(i => d0.AddDays(i)).ToList();
+                        var filas = FilasGantt(d, grupos, conFechas, d0);
+                        var ti = Fechas.Dias(d0, hoy);
+                        var verDias = n <= 70;
+                        <div class="ig" style="grid-template-columns:var(--inf-lw) repeat(@n, minmax(0, 1fr));grid-template-rows:auto auto repeat(@filas.Count, auto)">
+                            <div class="ig-l ig-hd" style="grid-row:1/3">Tarea</div>
+                            @{
+                                var mIni = 0;
+                                for (var i = 0; i < n; i++)
+                                {
+                                    if (i == n - 1 || dias[i + 1].Month != dias[i].Month)
+                                    {
+                                        <div class="ig-mes" style="grid-column:@(mIni + 2)/@(i + 3);grid-row:1">@(i - mIni >= 4 ? $"{Fechas.Meses[dias[i].Month - 1]} {dias[i].Year}" : "")</div>
+                                        mIni = i + 1;
+                                    }
+                                }
+                                for (var i = 0; i < n; i++)
+                                {
+                                    var dd = dias[i];
+                                    <div class="ig-dia tnum @(dd == hoy ? "hoy" : "")" style="grid-column:@(i + 2);grid-row:2">@(verDias || dd.DayOfWeek == DayOfWeek.Monday ? dd.Day.ToString() : "")</div>
+                                    var fest = Fechas.Festivo(dd);
+                                    if (fest is not null || Fechas.FinDeSemana(dd))
+                                    {
+                                        <div class="ig-bg @(fest is not null ? "hol" : "we")" style="grid-column:@(i + 2);grid-row:3/-1"></div>
+                                    }
+                                }
+                            }
+                            @for (var k = 0; k < filas.Count; k++)
+                            {
+                                var f = filas[k]; var r = k + 3;
+                                <div class="ig-l @f.Tipo" style="grid-row:@r">
+                                    @if (f.Tipo == "fase") { <span class="dotc" style="--c:@f.Color"></span> }
+                                    @if (f.Tipo == "sub") { <span class="ig-chk">@(f.Hecha ? "☑" : "☐")</span> }
+                                    <span class="ig-txt @(f.Hecha && f.Tipo == "sub" ? "done" : "")">@f.Texto</span>
+                                    @if (f.Tipo == "tarea") { <span class="ig-pct tnum">@Ui.Pct(f.Progreso)</span> }
+                                </div>
+                                <div class="ig-linea @f.Tipo" style="grid-column:2/-1;grid-row:@r"></div>
+                                @if (f.Ini >= 0)
+                                {
+                                    <div class="ig-bar @f.Tipo @(f.Hecha ? "done" : "")" style="grid-column:@(f.Ini + 2)/@(f.Fin + 3);grid-row:@r;--c:@f.Color">
+                                        @if (f.Tipo == "tarea") { <span style="width:@Ui.Num(f.Progreso * 100)%"></span> }
+                                    </div>
+                                }
+                            }
+                            @if (ti >= 0 && ti < n)
+                            {
+                                <div class="ig-hoy" style="grid-column:@(ti + 2);grid-row:1/-1" title="Hoy"></div>
+                            }
+                        </div>
+                        <div class="inf-ley">
+                            <span><i class="we"></i>Fin de semana</span><span><i class="hol"></i>Festivo (Colombia)</span>
+                            @if (ti >= 0 && ti < n) { <span><i class="hoy"></i>Hoy</span> }
+                            <span>El tramo sólido de cada barra es su avance.</span>
+                            @if (ConSubtareas) { <span>☑ Subtarea hecha · ☐ pendiente</span> }
+                        </div>
+                    }
+                </section>
+            }
+
+            @if (ConLista)
+            {
+                <section class="inf-sec">
+                    <h2>Tareas</h2>
+                    @foreach (var (g, lista) in grupos)
+                    {
+                        <h3><span class="dotc" style="--c:@Ui.Color(d, g.Id)"></span> @g.Nombre <span class="muted">· @lista.Count tarea@(lista.Count == 1 ? "" : "s") · @Ui.Pct(Ui.Avance(lista))</span></h3>
+                        <table class="inf-tabla">
+                            <thead><tr><th style="width:38%">Tarea</th><th>Responsable</th><th>Inicio</th><th>Entrega</th><th>Estado</th><th>Prioridad</th><th class="num">Avance</th></tr></thead>
+                            <tbody>
+                                @foreach (var t in lista)
+                                {
+                                    <tr class="@(t.Estado == "hecha" ? "done" : "")">
+                                        <td>
+                                            <div class="inf-ttl">@t.Titulo @if (t.Semaforo.Length > 0) { <span class="sem @t.Semaforo">@Ui.TextoSemaforo(t)</span> }</div>
+                                            @if (t.Entregable.Length > 0) { <div class="inf-ext">Entregable: @t.Entregable</div> }
+                                            @if (ConSubtareas && t.Subtareas.Count > 0)
+                                            {
+                                                <ul class="inf-subs">
+                                                    @foreach (var s in t.Subtareas)
+                                                    {
+                                                        <li class="@(s.Hecha ? "done" : "")"><span class="ig-chk">@(s.Hecha ? "☑" : "☐")</span> @s.Texto</li>
+                                                    }
+                                                </ul>
+                                            }
+                                            @if (ConNotas && t.Notas.Trim().Length > 0) { <div class="inf-notas">@t.Notas</div> }
+                                        </td>
+                                        <td>@(t.Responsable.Length > 0 ? t.Responsable : "Sin asignar")</td>
+                                        <td class="tnum">@Fechas.Corto(t.Inicio)</td>
+                                        <td class="tnum">@Fechas.Corto(t.Fin)</td>
+                                        <td><Etiquetas Estado="@t.Estado" /></td>
+                                        <td><span class="pr pr-@t.Prioridad">@Catalogo.Prioridades.GetValueOrDefault(t.Prioridad, "Media")</span></td>
+                                        <td class="num tnum">@Ui.Pct(t.Progreso)@(t.Subtareas.Count > 0 ? $" ({t.Subtareas.Count(s => s.Hecha)}/{t.Subtareas.Count})" : "")</td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    }
+                </section>
+            }
+        }
+        <footer class="inf-pie">Londoño Gómez · Cronograma · @Fechas.Ymd(hoy)</footer>
+    </article>
+</div>
+
+@code {
+    [CascadingParameter] Task<AuthenticationState>? Auth { get; set; }
+    [SupplyParameterFromQuery(Name = "resp")] public string? Resp { get; set; }
+    [SupplyParameterFromQuery(Name = "estado")] public string? Estado { get; set; }
+    [SupplyParameterFromQuery(Name = "q")] public string? Q { get; set; }
+    [SupplyParameterFromQuery(Name = "imprimir")] public int? Imprimir { get; set; }
+    // "o=1" indica que el formulario de opciones se envió (una casilla sin marcar no llega en la URL)
+    [SupplyParameterFromQuery(Name = "o")] public int? Opciones { get; set; }
+    [SupplyParameterFromQuery(Name = "cronograma")] public int? Cronograma { get; set; }
+    [SupplyParameterFromQuery(Name = "lista")] public int? Lista { get; set; }
+    [SupplyParameterFromQuery(Name = "subtareas")] public int? Subtareas { get; set; }
+    [SupplyParameterFromQuery(Name = "notas")] public int? Notas { get; set; }
+
+    string? Usuario;
+    bool ConCronograma => Opciones == 1 ? Cronograma == 1 : true;
+    bool ConLista => Opciones == 1 ? Lista == 1 : true;
+    bool ConSubtareas => Opciones == 1 ? Subtareas == 1 : true;
+    bool ConNotas => Opciones == 1 && Notas == 1;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (Auth is not null) Usuario = (await Auth).User.Identity?.Name;
+    }
+
+    sealed record Fila(string Tipo, string Texto, string Color, int Ini, int Fin, double Progreso, bool Hecha);
+
+    List<Fila> FilasGantt(Datos d, List<(Ui.Grupo g, List<Tarea> lista)> grupos, List<Tarea> conFechas, DateOnly d0)
+    {
+        var filas = new List<Fila>();
+        foreach (var (g, lista) in grupos)
+        {
+            var tareas = lista.Where(conFechas.Contains).ToList();
+            if (tareas.Count == 0) continue;
+            var color = Ui.Color(d, g.Id);
+            filas.Add(new Fila("fase", g.Nombre, color, -1, -1, 0, false));
+            foreach (var t in tareas)
+            {
+                var ini = Fechas.Dias(d0, Fechas.Parse(t.Inicio)!.Value);
+                var fin = Fechas.Dias(d0, Fechas.Parse(t.Fin)!.Value);
+                filas.Add(new Fila("tarea", t.Titulo, color, ini, fin, t.Progreso, t.Estado == "hecha"));
+                if (ConSubtareas)
+                    foreach (var s in t.Subtareas) filas.Add(new Fila("sub", s.Texto, color, ini, fin, 0, s.Hecha));
+            }
+        }
+        return filas;
+    }
+}

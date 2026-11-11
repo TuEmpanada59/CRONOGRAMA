@@ -33,6 +33,28 @@ public static class Ui
         return l.Count == 0 ? 0 : l.Average(t => t.Progreso);
     }
 
+    /// <summary>Filtros de la barra de herramientas (se usan también en el informe PDF).</summary>
+    public static List<Tarea> Filtrar(Datos d, string? resp, string? estado, string? texto)
+    {
+        resp ??= ""; estado ??= "";
+        var q = (texto ?? "").Trim().ToLowerInvariant();
+        return d.Tareas.Where(t =>
+            (resp.Length == 0 || (resp == "__none" ? t.Responsable.Length == 0 : t.Responsable == resp)) &&
+            (estado.Length == 0 || (estado == "abiertas" ? t.Estado != "hecha" : t.Estado == estado)) &&
+            (q.Length == 0 || t.Titulo.ToLowerInvariant().Contains(q) || t.Notas.ToLowerInvariant().Contains(q) ||
+             t.Subtareas.Any(s => s.Texto.ToLowerInvariant().Contains(q)))).ToList();
+    }
+
+    /// <summary>Texto legible de los filtros activos, o null si no hay.</summary>
+    public static string? DescribirFiltros(string? resp, string? estado, string? texto)
+    {
+        var partes = new List<string>();
+        if (!string.IsNullOrEmpty(resp)) partes.Add(resp == "__none" ? "sin responsable" : $"responsable: {resp}");
+        if (!string.IsNullOrEmpty(estado)) partes.Add(estado == "abiertas" ? "solo sin terminar" : $"estado: {Catalogo.Estados.GetValueOrDefault(estado, estado)}");
+        if (!string.IsNullOrWhiteSpace(texto)) partes.Add($"búsqueda: “{texto.Trim()}”");
+        return partes.Count == 0 ? null : string.Join(" · ", partes);
+    }
+
     public static string Pct(double p) => $"{Math.Round(p * 100)}%";
     public static string Num(double v) => v.ToString(System.Globalization.CultureInfo.InvariantCulture);
 

@@ -6,6 +6,7 @@ Planificador de tareas para un equipo de dos personas. Tiene fases, tareas con s
 - **Sincronización en vivo**: cuando una persona guarda algo, la pantalla de la otra se actualiza sola.
 - **Diseño** basado en el manual de marca 2026: azul `#0076e3`, azul oscuro `#1e222b`, gris `#c3cfdb`, acentos `#00d4a1` y `#00c9ff`, tipografías Poppins y Assistant, bordes de 5 px. Es minimalista, oscuro por defecto y con botón para pasar a modo claro (cada navegador recuerda su elección).
 - **Acceso con usuario y clave** (cookie de sesión de 30 días).
+- **Exportar a PDF**: informe con logo, resumen por fase, cronograma y lista de tareas con subtareas (A4 horizontal). Respeta los filtros activos.
 - **Exportar a CSV** (se abre en Excel) y **descargar un respaldo .json**.
 
 ## ¿Necesita base de datos?
@@ -108,4 +109,5 @@ Azure asigna la cuota del plan F1 por suscripción, región y sistema operativo.
    - Haz clic en cualquier tarea, barra o evento para editarla. **Eliminar** pide confirmación.
    - Las tareas vencidas aparecen en rojo y las que vencen en 2 días o menos, en ámbar.
    - Los filtros de responsable, estado y búsqueda sirven para todas las vistas.
-5. **Exportar CSV** descarga todas las tareas para Excel. En *Fases y equipo → Descargar respaldo* obtienes una copia completa en JSON.
+5. **Exportar PDF** abre el informe en otra pestaña con el diálogo de impresión: elige *Guardar como PDF* como destino. Arriba puedes marcar qué incluir (cronograma, lista de tareas, subtareas, notas). Si tienes filtros puestos (responsable, estado o búsqueda), el informe solo incluye esas tareas.
+6. **Exportar CSV** descarga todas las tareas para Excel. En *Fases y equipo → Descargar respaldo* obtienes una copia completa en JSON.

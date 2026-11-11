@@ -58,6 +58,23 @@
     guardarAncho(anchoLabels(anchoActual(h) + (e.key === 'ArrowRight' ? 20 : -20)));
   });
 
+  // Informe PDF: abre el diálogo de impresión al cargar (?imprimir=1) y con el botón "Guardar como PDF"
+  function imprimir() {
+    var listo = document.fonts && document.fonts.ready ? document.fonts.ready : Promise.resolve();
+    listo.then(function () { setTimeout(function () { window.print(); }, 300); });
+  }
+  function autoImprimir() {
+    var el = document.querySelector('[data-autoimprimir="1"]');
+    if (!el || el.dataset.hecho) return;
+    el.dataset.hecho = '1';
+    try { var u = new URL(location.href); u.searchParams.delete('imprimir'); history.replaceState(null, '', u); } catch (_) {}
+    imprimir();
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', autoImprimir); else autoImprimir();
+  document.addEventListener('click', function (e) {
+    if (e.target.closest && e.target.closest('[data-imprimir]')) imprimir();
+  });
+
   window.cg = {
     leer: function (k) { try { return localStorage.getItem(k); } catch (_) { return null; } },
     guardar: function (k, v) { try { localStorage.setItem(k, v); } catch (_) {} },

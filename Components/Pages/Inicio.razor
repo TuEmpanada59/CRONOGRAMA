@@ -43,6 +43,7 @@
         <div class="actions">
             @if (d.Tareas.Count > 0)
             {
+                <a class="btn ghost" href="@UrlInforme" target="_blank" rel="noopener" title="Abre el informe para guardarlo como PDF">Exportar PDF</a>
                 <a class="btn ghost" href="/exportar.csv" download>Exportar CSV</a>
             }
             <button class="btn ghost" type="button" @onclick="AbrirAjustes">Fases y equipo</button>
@@ -190,15 +191,13 @@
         catch (InvalidOperationException) { }
     }
 
-    List<Tarea> Filtradas()
-    {
-        var q = fQ.Trim().ToLowerInvariant();
-        return d.Tareas.Where(t =>
-            (fResp.Length == 0 || (fResp == "__none" ? t.Responsable.Length == 0 : t.Responsable == fResp)) &&
-            (fEstado.Length == 0 || (fEstado == "abiertas" ? t.Estado != "hecha" : t.Estado == fEstado)) &&
-            (q.Length == 0 || t.Titulo.ToLowerInvariant().Contains(q) || t.Notas.ToLowerInvariant().Contains(q) ||
-             t.Subtareas.Any(s => s.Texto.ToLowerInvariant().Contains(q)))).ToList();
-    }
+    List<Tarea> Filtradas() => Ui.Filtrar(d, fResp, fEstado, fQ);
+
+    // El informe PDF respeta los filtros que estén puestos
+    string UrlInforme => "/informe?imprimir=1" +
+        (fResp.Length > 0 ? "&resp=" + Uri.EscapeDataString(fResp) : "") +
+        (fEstado.Length > 0 ? "&estado=" + Uri.EscapeDataString(fEstado) : "") +
+        (fQ.Trim().Length > 0 ? "&q=" + Uri.EscapeDataString(fQ.Trim()) : "");
 
     async Task CambiarVista(string v)
     {
