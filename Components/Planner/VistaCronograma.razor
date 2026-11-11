@@ -15,7 +15,9 @@ else
     var n = Fechas.Dias(d0, d1) + 1;
     var dias = Enumerable.Range(0, n).Select(i => d0.AddDays(i)).ToList();
     var grupos = Ui.Grupos(Datos).Select(g => (g, lista: Ui.Ordenar(ts.Where(t => Ui.EnFase(Datos, t, g.Id))).ToList())).Where(x => x.lista.Count > 0).ToList();
-    var filas = "20px 34px " + string.Join(" ", grupos.Select(x => $"{PH}px " + string.Join(" ", x.lista.Select(_ => $"{RH}px"))));
+    // Alto de cada fila: fase, tarea y (si está desplegada) una fila por subtarea
+    var filas = "20px 34px " + string.Join(" ", grupos.Select(x => $"{PH}px " + string.Join(" ", x.lista.Select(t =>
+        $"{RH}px" + string.Concat(Enumerable.Repeat($" {SH}px", Abierta(t) ? t.Subtareas.Count : 0))))));
     var fila = 3; var y = HH;
     var ti = Fechas.Dias(d0, hoy);
 
@@ -45,22 +47,46 @@ else
                 fila++; y += PH;
                 foreach (var t in lista)
                 {
-                    <div class="g-label" style="grid-row:@fila" title="@t.Titulo">@t.Titulo</div>
-                    for (var i = 0; i < n; i++)
-                    {
-                        var dd = dias[i];
-                        var clase = Fechas.Festivo(dd) is not null ? "hol" : Fechas.FinDeSemana(dd) ? "we" : "";
-                        <div class="g-cell @clase" style="grid-column:@(i + 2);grid-row:@fila"></div>
-                    }
+                    var tarea = t; var abierta = Abierta(t);
                     var ini = Fechas.Parse(t.Inicio)!.Value; var fin = Fechas.Parse(t.Fin)!.Value;
-                    var s = Fechas.Dias(d0, ini); var len = Fechas.Dias(ini, fin) + 1;
-                    var top = y + 8; var tarea = t;
+                    var x0 = Fechas.Dias(d0, ini) * CW + 2; var ancho = Math.Max((Fechas.Dias(ini, fin) + 1) * CW - 4, 10);
+                    var color = Ui.Color(Datos, t.Fase);
+                    <div class="g-label" style="grid-row:@fila" title="@t.Titulo">
+                        @if (t.Subtareas.Count > 0)
+                        {
+                            <BotonDesplegar Abierto="abierta" OnClick="() => OnAlternar.InvokeAsync(tarea.Id)" />
+                        }
+                        else
+                        {
+                            <span class="chev-sp"></span>
+                        }
+                        <span class="g-ttl">@t.Titulo</span>
+                    </div>
+                    @Celdas(dias, fila)
                     <button type="button" class="g-bar @(t.Estado == "hecha" ? "done" : "") @(t.Semaforo == "vencida" ? "late" : "")"
                             title="@t.Titulo · @Fechas.Corto(t.Inicio) → @Fechas.Corto(t.Fin)" @onclick="() => OnAbrir.InvokeAsync(tarea.Id)"
-                            style="--c:@Ui.Color(Datos, t.Fase);left:calc(var(--lw) + @(s * CW + 2)px);top:@(top)px;width:@(Math.Max(len * CW - 4, 10))px">
+                            style="--c:@color;left:calc(var(--lw) + @(x0)px);top:@(y + 8)px;width:@(ancho)px">
                         <span class="fill" style="width:@Ui.Num(t.Progreso * 100)%"></span><span>@Ui.Pct(t.Progreso)</span>
                     </button>
                     fila++; y += RH;
+                    if (abierta)
+                    {
+                        for (var j = 0; j < t.Subtareas.Count; j++)
+                        {
+                            var sub = t.Subtareas[j]; var idx = j;
+                            <div class="g-label g-sub" style="grid-row:@fila" title="@sub.Texto">
+                                <label class="subline @(sub.Hecha ? "done" : "")">
+                                    <input class="chk" type="checkbox" checked="@sub.Hecha" aria-label="Subtarea hecha: @sub.Texto"
+                                           @onchange="e => OnSubtarea.InvokeAsync(new Ui.CambioSubtarea(tarea.Id, idx, sub.Texto, e.Value is true))" />
+                                    <span>@sub.Texto</span>
+                                </label>
+                            </div>
+                            @Celdas(dias, fila, "subcell")
+                            <div class="g-subbar @(sub.Hecha ? "done" : "")" title="@(sub.Texto + (sub.Hecha ? " · hecha" : ""))"
+                                 style="--c:@color;left:calc(var(--lw) + @(x0)px);top:@(y + (SH - 6) / 2)px;width:@(ancho)px"></div>
+                            fila++; y += SH;
+                        }
+                    }
                 }
             }
             @if (ti >= 0 && ti < n)
@@ -74,6 +100,7 @@ else
         <span><i style="background:var(--holiday)"></i>Festivo (Colombia)</span>
         <span><i style="background:var(--accent);border-color:var(--accent)"></i>Hoy</span>
         <span>El tramo sólido de cada barra es su avance.</span>
+        <span><i class="lg-sub"></i>Subtarea (sólida = hecha)</span>
     </div>
 }
 
@@ -81,6 +108,22 @@ else
     [Parameter, EditorRequired] public Datos Datos { get; set; } = default!;
     [Parameter, EditorRequired] public IReadOnlyList<Tarea> Tareas { get; set; } = [];
     [Parameter] public EventCallback<string> OnAbrir { get; set; }
+    [Parameter] public IReadOnlySet<string> Desplegadas { get; set; } = new HashSet<string>();
+    [Parameter] public EventCallback<string> OnAlternar { get; set; }
+    [Parameter] public EventCallback<Ui.CambioSubtarea> OnSubtarea { get; set; }
 
-    const int CW = 30, RH = 34, PH = 30, HH = 54;
+    const int CW = 30, RH = 34, PH = 30, HH = 54, SH = 28;
+
+    bool Abierta(Tarea t) => t.Subtareas.Count > 0 && Desplegadas.Contains(t.Id);
+
+    /// <summary>Celdas de fondo de una fila (marca fines de semana y festivos).</summary>
+    static RenderFragment Celdas(List<DateOnly> dias, int fila, string extra = "") => __builder =>
+    {
+        for (var i = 0; i < dias.Count; i++)
+        {
+            var dd = dias[i];
+            var clase = Fechas.Festivo(dd) is not null ? "hol" : Fechas.FinDeSemana(dd) ? "we" : "";
+            <div class="g-cell @clase @extra" style="grid-column:@(i + 2);grid-row:@fila"></div>
+        }
+    };
 }

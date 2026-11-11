@@ -233,6 +233,15 @@ tr.subrow + tr.task td { border-top: 1px solid var(--line-soft) }
 .g-bar span { position: relative; color: var(--fg); mix-blend-mode: normal }
 .g-bar.done { opacity: .55 }
 .g-bar.late { box-shadow: 0 0 0 1.5px var(--danger) }
+.g-label .chev, .g-label .chev-sp { margin-left: -6px }
+.g-ttl { overflow: hidden; text-overflow: ellipsis }
+.g-label.g-sub { border-top: 0; padding-top: 0; padding-bottom: 0; padding-left: 30px }
+.g-label.g-sub .subline { padding: 3px 0 3px 12px; font-size: 13px; min-width: 0 }
+.g-label.g-sub .subline span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
+.g-cell.subcell { border-top: 0 }
+.g-subbar { position: absolute; height: 6px; border-radius: 3px; background: color-mix(in srgb, var(--c) 28%, transparent); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--c) 55%, transparent); pointer-events: auto }
+.g-subbar.done { background: var(--c); box-shadow: none }
+.legend i.lg-sub { height: 6px; width: 16px; border-radius: 3px; border: 0; background: var(--accent); vertical-align: 2px }
 .g-today { position: absolute; top: 0; bottom: 0; width: 1px; background: var(--accent); z-index: 1; pointer-events: none }
 
 /* Calendario */
