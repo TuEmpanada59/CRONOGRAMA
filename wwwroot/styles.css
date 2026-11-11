@@ -219,7 +219,12 @@ tr.subrow + tr.task td { border-top: 1px solid var(--line-soft) }
 
 /* Cronograma (Gantt) */
 .gantt-wrap { border: 1px solid var(--line); border-radius: var(--r); overflow-x: auto; background: var(--surface) }
-.gantt { --lw: 250px; display: grid; position: relative; min-width: max-content }
+.gantt { --lw: clamp(140px, var(--g-lw, 250px), 75vw); display: grid; position: relative; min-width: max-content }
+/* Tirador para estirar la columna de nombres */
+.g-resize { grid-column: 1; grid-row: 1 / -1; position: sticky; left: calc(var(--lw) - 5px); width: 10px; z-index: 4; cursor: col-resize; touch-action: none; outline: none }
+.g-resize::after { content: ""; position: absolute; top: 0; bottom: 0; left: 4px; width: 2px; border-radius: 1px; background: transparent; transition: background .15s }
+.g-resize:hover::after, .g-resize:focus-visible::after, .g-resize.activo::after { background: var(--accent) }
+body.redimensionando { cursor: col-resize; user-select: none }
 .g-label { grid-column: 1; position: sticky; left: 0; background: var(--surface); z-index: 2; padding: 6px 12px; border-right: 1px solid var(--line); border-top: 1px solid var(--line-soft); font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: flex; align-items: center; gap: 8px; width: var(--lw) }
 .g-label.phase { font-weight: 600; font-family: var(--f-display); font-size: 13px; background: var(--surface-2) }
 .g-head { font-size: 11px; text-align: center; color: var(--muted); padding: 3px 0; line-height: 1.25; overflow: hidden }
@@ -305,7 +310,7 @@ tr.subrow + tr.task td { border-top: 1px solid var(--line-soft) }
 
 @media (max-width: 640px) {
   h1 { font-size: 18px }
-  .gantt { --lw: 150px }
+  .gantt { --lw: clamp(110px, var(--g-lw, 150px), 65vw) }
   .filters { width: 100% }
   .filters select, .filters input { flex: 1 1 140px }
   .day { min-height: 76px; padding: 4px }

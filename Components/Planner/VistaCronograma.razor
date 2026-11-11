@@ -24,6 +24,10 @@ else
     <div class="gantt-wrap">
         <div class="gantt" style="grid-template-columns:var(--lw) repeat(@n, @(CW)px);grid-template-rows:@filas">
             <div class="g-label g-head" style="grid-row:1/3;border-top:0;justify-content:flex-start">Tarea</div>
+            @* Tirador para estirar la columna de nombres (lo maneja wwwroot/app.js) *@
+            <div class="g-resize" role="separator" aria-orientation="vertical" tabindex="0"
+                 aria-label="Ancho de la columna de tareas. Usa las flechas izquierda y derecha para ajustarlo"
+                 title="Arrastra para ajustar el ancho · doble clic para restablecer"></div>
             @{
                 var mIni = 0;
                 for (var i = 0; i < n; i++)

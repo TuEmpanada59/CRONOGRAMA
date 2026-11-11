@@ -22,6 +22,42 @@
     var x = document.querySelector('.scrim .panel-h .x');
     if (x) x.click();
   });
+  // Estirar la columna de nombres del cronograma (se recuerda en este navegador)
+  var raiz = document.documentElement, MIN = 140, MAX = 700;
+  function anchoLabels(w) {
+    if (w == null) { raiz.style.removeProperty('--g-lw'); try { localStorage.removeItem('cg-lw'); } catch (_) {} return; }
+    w = Math.round(Math.max(MIN, Math.min(MAX, w)));
+    raiz.style.setProperty('--g-lw', w + 'px');
+    return w;
+  }
+  function guardarAncho(w) { try { localStorage.setItem('cg-lw', String(w)); } catch (_) {} }
+  try { var g = parseInt(localStorage.getItem('cg-lw'), 10); if (g) anchoLabels(g); } catch (_) {}
+  function anchoActual(h) { var l = h.parentNode.querySelector('.g-label'); return l ? l.getBoundingClientRect().width : 250; }
+  document.addEventListener('pointerdown', function (e) {
+    var h = e.target.closest && e.target.closest('.g-resize');
+    if (!h || e.button !== 0) return;
+    e.preventDefault();
+    var x0 = e.clientX, w0 = anchoActual(h), w = w0;
+    h.classList.add('activo'); document.body.classList.add('redimensionando');
+    try { h.setPointerCapture(e.pointerId); } catch (_) {}
+    function mover(ev) { w = anchoLabels(w0 + ev.clientX - x0); }
+    function soltar() {
+      h.removeEventListener('pointermove', mover); h.removeEventListener('pointerup', soltar); h.removeEventListener('pointercancel', soltar);
+      h.classList.remove('activo'); document.body.classList.remove('redimensionando');
+      guardarAncho(w);
+    }
+    h.addEventListener('pointermove', mover); h.addEventListener('pointerup', soltar); h.addEventListener('pointercancel', soltar);
+  });
+  document.addEventListener('dblclick', function (e) {
+    if (e.target.closest && e.target.closest('.g-resize')) anchoLabels(null);
+  });
+  document.addEventListener('keydown', function (e) {
+    var h = e.target.closest && e.target.closest('.g-resize');
+    if (!h || (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight')) return;
+    e.preventDefault();
+    guardarAncho(anchoLabels(anchoActual(h) + (e.key === 'ArrowRight' ? 20 : -20)));
+  });
+
   window.cg = {
     leer: function (k) { try { return localStorage.getItem(k); } catch (_) { return null; } },
     guardar: function (k, v) { try { localStorage.setItem(k, v); } catch (_) {} },
