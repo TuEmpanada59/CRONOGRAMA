@@ -57,7 +57,7 @@ Los datos locales quedan en la carpeta `data/`, que está excluida de git.
 ## Publicar en Azure App Service (plan gratuito F1)
 
 1. **Crear la app** en el portal de Azure: *App Services → Crear → Aplicación web*.
-   - Publicar: **Código** · Pila del entorno de ejecución: **.NET 10 (LTS)** · Sistema operativo: **Linux**.
+   - Publicar: **Código** · Pila del entorno de ejecución: **.NET 10 (LTS)** · Sistema operativo: **Linux** (o **Windows**, funciona igual).
    - Plan de precios: **Gratis F1**.
    - Para QA crea una segunda app (por ejemplo `cronograma-lg-qa`) en el **mismo plan F1**. El plan gratuito admite varias apps. Comparten la cuota diaria, pero cada una tiene sus propios datos.
 2. **Configuración → Configuración general**: activa **Web sockets** y **Afinidad ARR**. Blazor los necesita.
@@ -76,6 +76,15 @@ Los datos locales quedan en la carpeta `data/`, que está excluida de git.
    - Cada push a `main` despliega producción y cada push a `QA` despliega pruebas.
 
    Otra opción es usar *Centro de implementación → GitHub* en Azure. En ese caso Azure crea su propio workflow y puedes borrar `.github/workflows/azure.yml`.
+
+### Error «Operation cannot be completed without additional quota… F1 VMs: 0»
+
+Azure asigna la cuota del plan F1 por suscripción, región y sistema operativo. Ese error quiere decir que tu suscripción tiene 0 planes F1 permitidos en la combinación que elegiste. La app funciona igual en Linux y en Windows, así que prueba en este orden:
+
+1. **Cambia la región** al crear el plan (por ejemplo *East US 2*, *Central US*, *South Central US*, *West US 3*, *Brazil South* o *West Europe*). La app y su plan deben quedar en la misma región.
+2. **Cambia el sistema operativo a Windows** (pila *.NET 10*). La cuota F1 de Windows es independiente de la de Linux. En Windows los datos quedan en `D:\home\data` y no hay que cambiar nada del código.
+3. **Pide aumento de cuota**: *Cuotas → App Service* (o *Ayuda y soporte → Nueva solicitud → Límites de servicio y suscripción (cuotas) → App Service*), elige la región y solicita **F1 = 1** (o 2 si también crearás QA). Las suscripciones de prueba o de estudiante a veces no permiten esta solicitud.
+4. Si nada de lo anterior funciona, el plan **B1** (pago, ~13 USD/mes) no tiene esta restricción y sirve sin cambios.
 
 **Límites del plan gratuito:** 60 minutos de CPU al día (de sobra para dos personas). La app se duerme tras unos 20 minutos sin uso, así que la primera carga del día tarda unos segundos. No admite dominio propio con SSL, pero la dirección `https://<nombre>.azurewebsites.net` funciona con HTTPS.
 
