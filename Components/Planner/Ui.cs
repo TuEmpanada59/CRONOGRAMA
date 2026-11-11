@@ -7,6 +7,9 @@ public static class Ui
 {
     public sealed record Grupo(string Id, string Nombre);
 
+    /// <summary>Marcar/desmarcar una subtarea sin abrir el editor.</summary>
+    public sealed record CambioSubtarea(string TareaId, int Indice, string Texto, bool Hecha);
+
     /// <summary>Fases en orden + un grupo "Sin fase" si hay tareas huérfanas.</summary>
     public static List<Grupo> Grupos(Datos d)
     {

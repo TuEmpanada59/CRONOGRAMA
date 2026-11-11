@@ -16,9 +16,29 @@
                     <div class="meta tnum">
                         <span>@Fechas.Corto(t.Fin)</span>
                         @if (t.Responsable.Length > 0) { <span>· @t.Responsable</span> }
-                        @if (t.Subtareas.Count > 0) { <span>· @hechas/@t.Subtareas.Count</span> }
                         <Etiquetas Tarea="t" />
                     </div>
+                    @if (t.Subtareas.Count > 0)
+                    {
+                        var abierta = Desplegadas.Contains(t.Id); var tarea = t;
+                        <BotonDesplegar Abierto="abierta" Clase="chev-card" OnClick="() => OnAlternar.InvokeAsync(tarea.Id)">
+                            <span class="tnum">@hechas/@t.Subtareas.Count subtareas</span>
+                        </BotonDesplegar>
+                        @if (abierta)
+                        {
+                            <div class="card-subs" @onclick:stopPropagation="true" @onkeydown:stopPropagation="true">
+                                @for (var i = 0; i < t.Subtareas.Count; i++)
+                                {
+                                    var s = t.Subtareas[i]; var idx = i;
+                                    <label class="subline @(s.Hecha ? "done" : "")" @key="i">
+                                        <input class="chk" type="checkbox" checked="@s.Hecha" aria-label="Subtarea hecha: @s.Texto"
+                                               @onchange="e => OnSubtarea.InvokeAsync(new Ui.CambioSubtarea(tarea.Id, idx, s.Texto, e.Value is true))" />
+                                        <span>@s.Texto</span>
+                                    </label>
+                                }
+                            </div>
+                        }
+                    }
                 </div>
             }
             @if (items.Count == 0)
@@ -34,6 +54,9 @@
     [Parameter, EditorRequired] public IReadOnlyList<Tarea> Tareas { get; set; } = [];
     [Parameter] public EventCallback<string> OnAbrir { get; set; }
     [Parameter] public EventCallback<(string Id, string Estado)> OnMover { get; set; }
+    [Parameter] public IReadOnlySet<string> Desplegadas { get; set; } = new HashSet<string>();
+    [Parameter] public EventCallback<string> OnAlternar { get; set; }
+    [Parameter] public EventCallback<Ui.CambioSubtarea> OnSubtarea { get; set; }
 
     string? arrastrando, sobre;
 

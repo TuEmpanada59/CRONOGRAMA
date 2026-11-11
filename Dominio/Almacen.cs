@@ -94,6 +94,19 @@ public sealed class Almacen
         return id;
     });
 
+    /// <summary>Marca o desmarca una subtarea desde la lista o el tablero (sin abrir el editor).</summary>
+    /// <remarks>Se identifica por posición y texto, por si la otra persona la editó mientras tanto.</remarks>
+    public Task<string> MarcarSubtarea(string id, int indice, string texto, bool hecha, string usuario) => Escribir(d =>
+    {
+        var t = d.Tareas.FirstOrDefault(x => x.Id == id) ?? throw new ErrorValidacion("La tarea ya no existe.");
+        var s = indice >= 0 && indice < t.Subtareas.Count && t.Subtareas[indice].Texto == texto
+            ? t.Subtareas[indice]
+            : t.Subtareas.FirstOrDefault(x => x.Texto == texto) ?? throw new ErrorValidacion("La subtarea cambió. Revisa la tarea.");
+        s.Hecha = hecha;
+        t.Actualizada = Ahora(); t.ActualizadaPor = usuario;
+        return id;
+    });
+
     public Task<string> EliminarTarea(string id) => Escribir(d =>
     {
         if (d.Tareas.RemoveAll(x => x.Id == id) == 0) throw new ErrorValidacion("La tarea ya no existe.");

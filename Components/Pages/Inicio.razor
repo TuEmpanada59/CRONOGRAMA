@@ -108,7 +108,7 @@
         }
         else if (vista == "tablero")
         {
-            <VistaTablero Datos="d" Tareas="ts" OnAbrir="Abrir" OnMover="Mover" />
+            <VistaTablero Datos="d" Tareas="ts" OnAbrir="Abrir" OnMover="Mover" Desplegadas="desplegadas" OnAlternar="Alternar" OnSubtarea="MarcarSubtarea" />
         }
         else if (vista == "cronograma")
         {
@@ -120,7 +120,8 @@
         }
         else
         {
-            <VistaLista Datos="d" Tareas="ts" HayFiltros="HayFiltros" OnAbrir="Abrir" OnNuevaEn="id => NuevaTarea(id)" OnMarcar="Marcar" />
+            <VistaLista Datos="d" Tareas="ts" HayFiltros="HayFiltros" Desplegadas="desplegadas" OnAbrir="Abrir" OnNuevaEn="id => NuevaTarea(id)"
+                        OnAlternar="Alternar" OnMarcar="Marcar" OnSubtarea="MarcarSubtarea" />
         }
     </main>
 </div>
@@ -149,6 +150,8 @@
     string fResp = "", fEstado = "", fQ = "";
     Tarea? borrador;
     bool ajustes;
+    // Tareas con las subtareas desplegadas (se recuerda en este navegador)
+    HashSet<string> desplegadas = [];
     string? aviso;
     CancellationTokenSource? avisoCts;
 
@@ -174,6 +177,12 @@
             {
                 var v = await JS.InvokeAsync<string?>("cg.leer", "cg-vista");
                 if (v is not null && Vistas.Any(x => x.Item1 == v) && v != vista) { vista = v; StateHasChanged(); }
+                var abiertas = await JS.InvokeAsync<string?>("cg.leer", "cg-desplegadas");
+                if (!string.IsNullOrEmpty(abiertas))
+                {
+                    try { desplegadas = System.Text.Json.JsonSerializer.Deserialize<HashSet<string>>(abiertas) ?? []; StateHasChanged(); }
+                    catch (System.Text.Json.JsonException) { }
+                }
             }
             if (vista == "cronograma") await JS.InvokeVoidAsync("cg.centrarHoy");
         }
@@ -236,22 +245,50 @@
     async Task<string?> GuardarTarea(Tarea t)
     {
         var nueva = t.Id.Length == 0;
-        var err = await Intentar(() => nueva ? Db.CrearTarea(t, usuario) : Db.ActualizarTarea(t, usuario), nueva ? "Tarea creada" : "Cambios guardados");
-        if (err is null) borrador = null;
+        var antes = nueva ? 0 : d.Tareas.FirstOrDefault(x => x.Id == t.Id)?.Subtareas.Count ?? 0;
+        var id = t.Id;
+        var err = await Intentar(async () => id = nueva ? await Db.CrearTarea(t, usuario) : await Db.ActualizarTarea(t, usuario),
+            nueva ? "Tarea creada" : "Cambios guardados");
+        if (err is null)
+        {
+            borrador = null;
+            // Al crear una tarea con subtareas (o al agregarle las primeras) queda desplegada
+            if (t.Subtareas.Count > 0 && antes == 0 && desplegadas.Add(id)) await GuardarDesplegadas();
+            StateHasChanged(); // el editor llama por delegado: hay que redibujar esta página a mano
+        }
         return err;
+    }
+
+    async Task Alternar(string id)
+    {
+        if (!desplegadas.Remove(id)) desplegadas.Add(id);
+        await GuardarDesplegadas();
+    }
+
+    async Task GuardarDesplegadas()
+    {
+        // Se olvidan las tareas que ya no existen
+        desplegadas.IntersectWith(d.Tareas.Select(t => t.Id));
+        try { await JS.InvokeVoidAsync("cg.guardar", "cg-desplegadas", System.Text.Json.JsonSerializer.Serialize(desplegadas)); } catch { }
+    }
+
+    async Task MarcarSubtarea(Ui.CambioSubtarea c)
+    {
+        var err = await Intentar(() => Db.MarcarSubtarea(c.TareaId, c.Indice, c.Texto, c.Hecha, usuario), null);
+        if (err is not null) Avisar(err);
     }
 
     async Task<string?> EliminarTarea(string id)
     {
         var err = await Intentar(() => Db.EliminarTarea(id), "Tarea eliminada");
-        if (err is null) borrador = null;
+        if (err is null) { borrador = null; desplegadas.Remove(id); StateHasChanged(); }
         return err;
     }
 
     async Task<string?> GuardarAjustes(List<Fase> fases, List<string> equipo, Dictionary<string, string> renombres)
     {
         var err = await Intentar(() => Db.GuardarConfig(fases, equipo, renombres), "Ajustes guardados");
-        if (err is null) ajustes = false;
+        if (err is null) { ajustes = false; StateHasChanged(); }
         return err;
     }
 

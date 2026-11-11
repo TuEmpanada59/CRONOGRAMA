@@ -23,17 +23,58 @@
                     @foreach (var t in filas)
                     {
                         var hechas = t.Subtareas.Count(s => s.Hecha);
-                        <tr class="task @(t.Estado == "hecha" ? "done" : "")" @key="t.Id">
+                        var tieneSubs = t.Subtareas.Count > 0;
+                        var abierta = tieneSubs && Desplegadas.Contains(t.Id);
+                        <tr class="task @(t.Estado == "hecha" ? "done" : "") @(abierta ? "open" : "")" @key="t.Id">
                             <td><input class="chk" type="checkbox" checked="@(t.Estado == "hecha")" aria-label="Marcar como hecha"
                                        @onchange="e => OnMarcar.InvokeAsync((t, e.Value is true))" /></td>
-                            <td><button class="ttl" type="button" @onclick="() => OnAbrir.InvokeAsync(t.Id)">@t.Titulo</button> <Etiquetas Tarea="t" /></td>
+                            <td>
+                                <span class="ttl-wrap">
+                                    @if (tieneSubs)
+                                    {
+                                        <BotonDesplegar Abierto="abierta" OnClick="() => OnAlternar.InvokeAsync(t.Id)" />
+                                    }
+                                    else
+                                    {
+                                        <span class="chev-sp"></span>
+                                    }
+                                    <button class="ttl" type="button" @onclick="() => OnAbrir.InvokeAsync(t.Id)">@t.Titulo</button>
+                                    <Etiquetas Tarea="t" />
+                                </span>
+                            </td>
                             <td>@if (t.Responsable.Length > 0) { @t.Responsable } else { <span class="muted">Sin asignar</span> }</td>
                             <td class="tnum">@Fechas.Corto(t.Inicio)</td>
                             <td class="tnum">@Fechas.Corto(t.Fin)</td>
                             <td><Etiquetas Estado="@t.Estado" /></td>
                             <td><span class="pr pr-@t.Prioridad">@Catalogo.Prioridades.GetValueOrDefault(t.Prioridad, "Media")</span></td>
-                            <td class="subprog tnum">@(t.Subtareas.Count > 0 ? $"{hechas}/{t.Subtareas.Count} subtareas" : "—")</td>
+                            <td class="subprog tnum">
+                                @if (tieneSubs)
+                                {
+                                    <button class="lnk" type="button" aria-expanded="@(abierta ? "true" : "false")" @onclick="() => OnAlternar.InvokeAsync(t.Id)">@hechas/@t.Subtareas.Count subtareas</button>
+                                }
+                                else
+                                {
+                                    <span>—</span>
+                                }
+                            </td>
                         </tr>
+                        @if (abierta)
+                        {
+                            for (var i = 0; i < t.Subtareas.Count; i++)
+                            {
+                                var s = t.Subtareas[i]; var idx = i; var tarea = t;
+                                <tr class="subrow" @key="(t.Id + ':' + i)">
+                                    <td></td>
+                                    <td colspan="7">
+                                        <label class="subline @(s.Hecha ? "done" : "")">
+                                            <input class="chk" type="checkbox" checked="@s.Hecha" aria-label="Subtarea hecha: @s.Texto"
+                                                   @onchange="e => OnSubtarea.InvokeAsync(new Ui.CambioSubtarea(tarea.Id, idx, s.Texto, e.Value is true))" />
+                                            <span>@s.Texto</span>
+                                        </label>
+                                    </td>
+                                </tr>
+                            }
+                        }
                     }
                 </tbody>
             </table>
@@ -45,7 +86,11 @@
     [Parameter, EditorRequired] public Datos Datos { get; set; } = default!;
     [Parameter, EditorRequired] public IReadOnlyList<Tarea> Tareas { get; set; } = [];
     [Parameter] public bool HayFiltros { get; set; }
+    /// <summary>Ids de las tareas con las subtareas desplegadas.</summary>
+    [Parameter] public IReadOnlySet<string> Desplegadas { get; set; } = new HashSet<string>();
     [Parameter] public EventCallback<string> OnAbrir { get; set; }
     [Parameter] public EventCallback<string> OnNuevaEn { get; set; }
+    [Parameter] public EventCallback<string> OnAlternar { get; set; }
     [Parameter] public EventCallback<(Tarea, bool)> OnMarcar { get; set; }
+    [Parameter] public EventCallback<Ui.CambioSubtarea> OnSubtarea { get; set; }
 }

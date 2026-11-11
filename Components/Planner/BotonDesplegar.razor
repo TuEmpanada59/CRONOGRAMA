@@ -1,0 +1,14 @@
+@* Flechita para mostrar u ocultar las subtareas de una tarea *@
+<button type="button" class="chev @Clase" aria-expanded="@(Abierto ? "true" : "false")"
+        aria-label="@(Abierto ? "Ocultar subtareas" : "Mostrar subtareas")" title="@(Abierto ? "Ocultar subtareas" : "Mostrar subtareas")"
+        @onclick="OnClick" @onclick:stopPropagation="true" @onkeydown:stopPropagation="true">
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 3.5 10.5 8 6 12.5" /></svg>
+    @ChildContent
+</button>
+
+@code {
+    [Parameter] public bool Abierto { get; set; }
+    [Parameter] public EventCallback OnClick { get; set; }
+    [Parameter] public string? Clase { get; set; }
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+}
